@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addWorkspaceMemberSchema,
+  removeWorkspaceMemberSchema,
   updateWorkspaceMemberSchema,
 } from './workspace';
 
@@ -19,7 +20,17 @@ describe('workspace member schemas', () => {
 
   it('rejects an invalid role when updating a member', () => {
     expect(() =>
-      updateWorkspaceMemberSchema.parse({ role: 'super-admin' }),
+      updateWorkspaceMemberSchema.parse({
+        userId: '3a6521d7-c00f-4b0e-8435-fdfcb2ca7491',
+        role: 'super-admin',
+      }),
     ).toThrow();
+  });
+
+  it('requires a user id when updating or removing a member', () => {
+    expect(() =>
+      updateWorkspaceMemberSchema.parse({ role: 'viewer' }),
+    ).toThrow();
+    expect(() => removeWorkspaceMemberSchema.parse({})).toThrow();
   });
 });
