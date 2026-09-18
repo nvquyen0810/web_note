@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
 
 @Injectable()
@@ -7,7 +11,15 @@ export class AuthGuard extends PassportAuthGuard('jwt') {
     error: unknown,
     user: TUser | false | null | undefined,
   ): TUser {
-    if (error || !user) {
+    if (error instanceof HttpException) {
+      throw error;
+    }
+
+    if (error) {
+      throw error;
+    }
+
+    if (!user) {
       throw new UnauthorizedException({
         code: 'UNAUTHORIZED',
         message: 'Authentication is required',
