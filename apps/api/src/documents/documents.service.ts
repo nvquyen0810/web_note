@@ -10,7 +10,7 @@ import type {
   UpdateDocumentContentInput,
   UpdateDocumentInput,
 } from '@web-note/shared';
-import { and, eq, isNull, max } from 'drizzle-orm';
+import { and, desc, eq, isNull, max } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service';
 import {
   DATABASE,
@@ -343,6 +343,118 @@ export class DocumentsService {
       );
 
       return { version: next };
+    });
+  }
+
+  async listVersions(userId: string, documentId: string) {
+    await this.permissions.requireDocumentAccess(userId, documentId, 'read');
+    await this.findActiveDocument(documentId);
+
+    return this.database
+      .select({
+        version: documentVersions.version,
+        title: documentVersions.title,
+        createdAt: documentVersions.createdAt,
+        createdBy: documentVersions.createdBy,
+        restoredFromVersion: documentVersions.restoredFromVersion,
+      })
+      .from(documentVersions)
+      .where(eq(documentVersions.documentId, documentId))
+      .orderBy(desc(documentVersions.version));
+  }
+
+  async getVersion(userId: string, documentId: string, version: number) {
+    await this.permissions.requireDocumentAccess(userId, documentId, 'read');
+    await this.findActiveDocument(documentId);
+
+    const snap = await this.findVersion(documentId, version);
+    if (!snap) {
+      throw new NotFoundException({
+        code: 'VERSION_NOT_FOUND',
+        message: 'Document version not found',
+      });
+    }
+
+    return snap;
+  }
+
+  async restoreVersion(userId: string, documentId: string, version: number) {
+    await this.permissions.requireDocumentAccess(userId, documentId, 'edit');
+    const document = await this.findActiveDocument(documentId);
+
+    return this.database.transaction(async (tx) => {
+      const snap = await this.findVersion(documentId, version, tx);
+      if (!snap) {
+        throw new NotFoundException({
+          code: 'VERSION_NOT_FOUND',
+          message: 'Document version not found',
+        });
+      }
+
+      await tx
+        .update(documentRevisions)
+        .set({
+          content: snap.content,
+          updatedBy: userId,
+          updatedAt: new Date(),
+        })
+        .where(eq(documentRevisions.documentId, documentId));
+
+      await tx
+        .update(documents)
+        .set({
+          title: snap.title,
+          status: 'draft',
+          updatedAt: new Date(),
+        })
+        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)));
+
+      const [row] = await tx
+        .select({ maxVersion: max(documentVersions.version) })
+        .from(documentVersions)
+        .where(eq(documentVersions.documentId, documentId));
+
+      const next = (row?.maxVersion ?? 0) + 1;
+
+      await tx.insert(documentVersions).values({
+        documentId,
+        version: next,
+        content: snap.content,
+        title: snap.title,
+        createdBy: userId,
+        restoredFromVersion: version,
+      });
+
+      await this.audit.record(
+        {
+          actorId: userId,
+          action: 'document.restore',
+          resourceType: 'document',
+          resourceId: documentId,
+          workspaceId: document.workspaceId,
+          metadata: { version: next, restoredFromVersion: version },
+        },
+        tx,
+      );
+
+      return {
+        version: next,
+        restoredFromVersion: version,
+        status: 'draft' as const,
+      };
+    });
+  }
+
+  private async findVersion(
+    documentId: string,
+    version: number,
+    executor: Pick<Database, 'query'> = this.database,
+  ) {
+    return executor.query.documentVersions.findFirst({
+      where: and(
+        eq(documentVersions.documentId, documentId),
+        eq(documentVersions.version, version),
+      ),
     });
   }
 

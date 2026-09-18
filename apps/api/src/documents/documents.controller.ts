@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -110,5 +111,31 @@ export class DocumentsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.documents.publish(user.id, id);
+  }
+
+  @Get('documents/:id/versions')
+  listVersions(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.documents.listVersions(user.id, id);
+  }
+
+  @Get('documents/:id/versions/:version')
+  getVersion(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('version', ParseIntPipe) version: number,
+  ) {
+    return this.documents.getVersion(user.id, id, version);
+  }
+
+  @Post('documents/:id/versions/:version/restore')
+  restoreVersion(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('version', ParseIntPipe) version: number,
+  ) {
+    return this.documents.restoreVersion(user.id, id, version);
   }
 }
