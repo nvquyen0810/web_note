@@ -6,7 +6,7 @@ export default async function AppLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   const session = await auth();
-  if (!session?.accessToken) {
+  if (!session?.accessToken || session.error === 'RefreshAccessTokenError') {
     redirect('/');
   }
 

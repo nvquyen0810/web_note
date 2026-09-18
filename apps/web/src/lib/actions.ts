@@ -2,21 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { auth } from '@/auth';
+import type { WikiDocJson } from '@/components/editor/wiki-editor';
+import type { VersionRow } from '@/components/version-panel';
 import { apiFetch } from '@/lib/api';
-import type {
-  DocumentRow,
-  FolderRow,
-  WorkspaceSummary,
-} from '@/lib/types';
-
-async function requireAccessToken() {
-  const session = await auth();
-  if (!session?.accessToken) {
-    throw new Error('Unauthorized');
-  }
-  return session.accessToken;
-}
+import { requireAccessToken } from '@/lib/session';
+import type { DocumentRow, FolderRow, WorkspaceSummary } from '@/lib/types';
 
 export async function createWorkspaceAction(formData: FormData) {
   const name = String(formData.get('name') ?? '').trim();
@@ -85,4 +75,95 @@ export async function createDocumentAction(
 
   revalidatePath(`/w/${workspaceId}`);
   redirect(`/w/${workspaceId}/d/${document.id}`);
+}
+
+export async function saveDocumentContentAction(
+  documentId: string,
+  input: { title: string; content: WikiDocJson },
+) {
+  const token = await requireAccessToken();
+  return apiFetch(`/documents/${documentId}/content`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function publishDocumentAction(documentId: string) {
+  const token = await requireAccessToken();
+  await apiFetch(`/documents/${documentId}/publish`, token, {
+    method: 'POST',
+  });
+
+  const [document, versions] = await Promise.all([
+    apiFetch<DocumentRow & { content: WikiDocJson }>(
+      `/documents/${documentId}`,
+      token,
+    ),
+    apiFetch<VersionRow[]>(`/documents/${documentId}/versions`, token),
+  ]);
+
+  return { document, versions };
+}
+
+export async function restoreDocumentVersionAction(
+  documentId: string,
+  version: number,
+) {
+  const token = await requireAccessToken();
+  await apiFetch(
+    `/documents/${documentId}/versions/${version}/restore`,
+    token,
+    { method: 'POST' },
+  );
+
+  const [document, versions] = await Promise.all([
+    apiFetch<DocumentRow & { content: WikiDocJson }>(
+      `/documents/${documentId}`,
+      token,
+    ),
+    apiFetch<VersionRow[]>(`/documents/${documentId}/versions`, token),
+  ]);
+
+  return { document, versions };
+}
+
+export async function uploadDocumentImageAction(input: {
+  workspaceId: string;
+  documentId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  bytesBase64: string;
+}) {
+  const token = await requireAccessToken();
+
+  const presign = await apiFetch<{
+    fileId: string;
+    uploadUrl: string;
+  }>('/files/presign', token, {
+    method: 'POST',
+    body: JSON.stringify({
+      filename: input.filename,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      workspaceId: input.workspaceId,
+      documentId: input.documentId,
+    }),
+  });
+
+  const binary = Buffer.from(input.bytesBase64, 'base64');
+  const put = await fetch(presign.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': input.mimeType },
+    body: binary,
+  });
+
+  if (!put.ok) {
+    throw new Error(`Upload failed (${put.status})`);
+  }
+
+  return apiFetch<{ id: string; url: string }>('/files/complete', token, {
+    method: 'POST',
+    body: JSON.stringify({ fileId: presign.fileId }),
+  });
 }

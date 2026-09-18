@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { APP_NAME } from '@web-note/shared';
 import { redirect } from 'next/navigation';
 import { auth, signIn } from '@/auth';
@@ -6,7 +5,7 @@ import { Button } from '@/components/ui/button';
 
 export default async function HomePage() {
   const session = await auth();
-  if (session?.accessToken) {
+  if (session?.accessToken && !session.error) {
     redirect('/workspaces');
   }
 
@@ -27,6 +26,11 @@ export default async function HomePage() {
         <p className="mt-3 text-sm text-muted-foreground">
           Draft, publish, and share knowledge across workspaces.
         </p>
+        {session?.error ? (
+          <p className="mt-4 text-sm text-destructive">
+            Session expired. Please sign in again.
+          </p>
+        ) : null}
         <form
           className="mt-8"
           action={async () => {
@@ -38,12 +42,6 @@ export default async function HomePage() {
             Sign in with Keycloak
           </Button>
         </form>
-        <p className="mt-6 text-xs text-muted-foreground">
-          Already exploring?{' '}
-          <Link href="/workspaces" className="underline underline-offset-2">
-            Open workspaces
-          </Link>
-        </p>
       </div>
     </main>
   );

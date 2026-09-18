@@ -1,14 +1,15 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { APP_NAME } from '@web-note/shared';
 import { Settings } from 'lucide-react';
-import { auth, signOut } from '@/auth';
+import { signOut } from '@/auth';
 import { CreateEntityDialogs } from '@/components/create-entity-dialogs';
 import { SidebarTree } from '@/components/sidebar-tree';
 import { Button } from '@/components/ui/button';
 import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 import { ApiError, apiFetch } from '@/lib/api';
+import { redirectIfUnauthorized, requireAccessToken } from '@/lib/session';
 import type {
   DocumentRow,
   FolderRow,
@@ -25,12 +26,7 @@ export default async function WorkspaceLayout({
   params,
 }: WorkspaceLayoutProps) {
   const { workspaceId } = await params;
-  const session = await auth();
-  if (!session?.accessToken) {
-    redirect('/');
-  }
-
-  const token = session.accessToken;
+  const token = await requireAccessToken();
 
   let workspaces: WorkspaceSummary[];
   let folders: FolderRow[];
@@ -43,6 +39,7 @@ export default async function WorkspaceLayout({
       apiFetch<DocumentRow[]>(`/workspaces/${workspaceId}/documents`, token),
     ]);
   } catch (error) {
+    await redirectIfUnauthorized(error);
     if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
       notFound();
     }

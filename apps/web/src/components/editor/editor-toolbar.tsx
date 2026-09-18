@@ -24,12 +24,11 @@ import {
 } from 'lucide-react';
 import { useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { uploadDocumentImageAction } from '@/lib/actions';
 import { cn } from '@/lib/utils';
-import { uploadDocumentImage } from '@/lib/upload-image';
 
 type EditorToolbarProps = {
   editor: Editor;
-  accessToken: string;
   workspaceId: string;
   documentId: string;
 };
@@ -61,7 +60,6 @@ function ToolButton({
 
 export function EditorToolbar({
   editor,
-  accessToken,
   workspaceId,
   documentId,
 }: EditorToolbarProps) {
@@ -69,11 +67,20 @@ export function EditorToolbar({
 
   async function handleImageSelected(file: File | undefined) {
     if (!file) return;
-    const { url } = await uploadDocumentImage({
-      file,
-      accessToken,
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+      reader.readAsDataURL(file);
+    });
+    const base64 = dataUrl.split(',')[1] ?? '';
+    const { url } = await uploadDocumentImageAction({
       workspaceId,
       documentId,
+      filename: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+      bytesBase64: base64,
     });
     editor.chain().focus().setImage({ src: url, alt: file.name }).run();
   }

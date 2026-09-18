@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation';
-import { auth } from '@/auth';
 import { DocumentEditor } from '@/components/document-editor';
 import type { WikiDocJson } from '@/components/editor/wiki-editor';
 import type { VersionRow } from '@/components/version-panel';
 import { ApiError, apiFetch } from '@/lib/api';
+import { redirectIfUnauthorized, requireAccessToken } from '@/lib/session';
 import type { DocumentRow } from '@/lib/types';
 
 type DocumentPageProps = {
@@ -16,8 +16,7 @@ type DocumentDetail = DocumentRow & {
 
 export default async function DocumentPage({ params }: DocumentPageProps) {
   const { workspaceId, documentId } = await params;
-  const session = await auth();
-  const accessToken = session!.accessToken!;
+  const accessToken = await requireAccessToken();
 
   let document: DocumentDetail;
   let versions: VersionRow[];
@@ -28,7 +27,11 @@ export default async function DocumentPage({ params }: DocumentPageProps) {
       apiFetch<VersionRow[]>(`/documents/${documentId}/versions`, accessToken),
     ]);
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
+    await redirectIfUnauthorized(error);
+    if (
+      error instanceof ApiError &&
+      (error.status === 404 || error.status === 403)
+    ) {
       notFound();
     }
     throw error;
@@ -38,7 +41,6 @@ export default async function DocumentPage({ params }: DocumentPageProps) {
     <DocumentEditor
       workspaceId={workspaceId}
       documentId={documentId}
-      accessToken={accessToken}
       initialDocument={document}
       initialVersions={versions}
     />

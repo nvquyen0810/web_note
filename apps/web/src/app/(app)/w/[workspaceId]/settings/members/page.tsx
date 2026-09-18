@@ -1,6 +1,6 @@
-import { auth } from '@/auth';
 import { Badge } from '@/components/ui/badge';
 import { apiFetch } from '@/lib/api';
+import { redirectIfUnauthorized, requireAccessToken } from '@/lib/session';
 import type { WorkspaceRole } from '@web-note/shared';
 
 type MemberRow = {
@@ -19,11 +19,18 @@ export default async function WorkspaceMembersPage({
   params,
 }: MembersPageProps) {
   const { workspaceId } = await params;
-  const session = await auth();
-  const members = await apiFetch<MemberRow[]>(
-    `/workspaces/${workspaceId}/members`,
-    session!.accessToken!,
-  );
+  const token = await requireAccessToken();
+
+  let members: MemberRow[];
+  try {
+    members = await apiFetch<MemberRow[]>(
+      `/workspaces/${workspaceId}/members`,
+      token,
+    );
+  } catch (error) {
+    await redirectIfUnauthorized(error);
+    throw error;
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-10 sm:px-10">

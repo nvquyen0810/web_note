@@ -15,7 +15,6 @@ const EMPTY_DOC: WikiDocJson = {
 type WikiEditorProps = {
   content: WikiDocJson;
   editable?: boolean;
-  accessToken: string;
   workspaceId: string;
   documentId: string;
   onChange: (content: WikiDocJson) => void;
@@ -25,7 +24,6 @@ type WikiEditorProps = {
 export function WikiEditor({
   content,
   editable = true,
-  accessToken,
   workspaceId,
   documentId,
   onChange,
@@ -70,7 +68,6 @@ export function WikiEditor({
       {editable ? (
         <EditorToolbar
           editor={editor}
-          accessToken={accessToken}
           workspaceId={workspaceId}
           documentId={documentId}
         />

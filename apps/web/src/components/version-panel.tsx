@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
-import { apiFetch } from '@/lib/api';
 
 export type VersionRow = {
   version: number;
@@ -13,16 +12,14 @@ export type VersionRow = {
 };
 
 type VersionPanelProps = {
-  documentId: string;
-  accessToken: string;
   versions: VersionRow[];
-  onRestored: () => Promise<void> | void;
+  onRestore: (version: number) => Promise<void>;
+  onRestored?: () => void;
 };
 
 export function VersionPanel({
-  documentId,
-  accessToken,
   versions,
+  onRestore,
   onRestored,
 }: VersionPanelProps) {
   const [pendingVersion, setPendingVersion] = useState<number | null>(null);
@@ -34,12 +31,8 @@ export function VersionPanel({
     setPendingVersion(version);
     startTransition(async () => {
       try {
-        await apiFetch(
-          `/documents/${documentId}/versions/${version}/restore`,
-          accessToken,
-          { method: 'POST' },
-        );
-        await onRestored();
+        await onRestore(version);
+        onRestored?.();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Restore failed');
       } finally {

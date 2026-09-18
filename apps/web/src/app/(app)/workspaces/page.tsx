@@ -1,18 +1,23 @@
 import Link from 'next/link';
 import { APP_NAME } from '@web-note/shared';
-import { auth, signOut } from '@/auth';
+import { signOut } from '@/auth';
 import { CreateWorkspaceDialog } from '@/components/create-workspace-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api';
+import { redirectIfUnauthorized, requireAccessToken } from '@/lib/session';
 import type { WorkspaceSummary } from '@/lib/types';
 
 export default async function WorkspacesPage() {
-  const session = await auth();
-  const workspaces = await apiFetch<WorkspaceSummary[]>(
-    '/workspaces',
-    session!.accessToken!,
-  );
+  const accessToken = await requireAccessToken();
+
+  let workspaces: WorkspaceSummary[];
+  try {
+    workspaces = await apiFetch<WorkspaceSummary[]>('/workspaces', accessToken);
+  } catch (error) {
+    await redirectIfUnauthorized(error);
+    throw error;
+  }
 
   return (
     <div className="min-h-screen">

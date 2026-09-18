@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { auth } from '@/auth';
 import { Badge } from '@/components/ui/badge';
 import { apiFetch } from '@/lib/api';
+import { redirectIfUnauthorized, requireAccessToken } from '@/lib/session';
 import type { DocumentRow, WorkspaceSummary } from '@/lib/types';
 
 type WorkspaceHomeProps = {
@@ -10,13 +10,19 @@ type WorkspaceHomeProps = {
 
 export default async function WorkspaceHomePage({ params }: WorkspaceHomeProps) {
   const { workspaceId } = await params;
-  const session = await auth();
-  const token = session!.accessToken!;
+  const token = await requireAccessToken();
 
-  const [workspaces, documents] = await Promise.all([
-    apiFetch<WorkspaceSummary[]>('/workspaces', token),
-    apiFetch<DocumentRow[]>(`/workspaces/${workspaceId}/documents`, token),
-  ]);
+  let workspaces: WorkspaceSummary[];
+  let documents: DocumentRow[];
+  try {
+    [workspaces, documents] = await Promise.all([
+      apiFetch<WorkspaceSummary[]>('/workspaces', token),
+      apiFetch<DocumentRow[]>(`/workspaces/${workspaceId}/documents`, token),
+    ]);
+  } catch (error) {
+    await redirectIfUnauthorized(error);
+    throw error;
+  }
 
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const recent = documents

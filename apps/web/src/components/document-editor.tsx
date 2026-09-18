@@ -7,7 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAutosave } from '@/hooks/use-autosave';
-import { apiFetch } from '@/lib/api';
+import {
+  publishDocumentAction,
+  restoreDocumentVersionAction,
+  saveDocumentContentAction,
+} from '@/lib/actions';
 import type { DocumentRow } from '@/lib/types';
 
 type DocumentDetail = DocumentRow & {
@@ -17,7 +21,6 @@ type DocumentDetail = DocumentRow & {
 type DocumentEditorProps = {
   workspaceId: string;
   documentId: string;
-  accessToken: string;
   initialDocument: DocumentDetail;
   initialVersions: VersionRow[];
 };
@@ -26,6 +29,8 @@ type SavePayload = {
   title: string;
   content: WikiDocJson;
 };
+
+type AutosaveUiStatus = ReturnType<typeof useAutosave<SavePayload>>['status'];
 
 function statusLabel(status: AutosaveUiStatus) {
   switch (status) {
@@ -42,12 +47,9 @@ function statusLabel(status: AutosaveUiStatus) {
   }
 }
 
-type AutosaveUiStatus = ReturnType<typeof useAutosave<SavePayload>>['status'];
-
 export function DocumentEditor({
   workspaceId,
   documentId,
-  accessToken,
   initialDocument,
   initialVersions,
 }: DocumentEditorProps) {
@@ -68,53 +70,35 @@ export function DocumentEditor({
 
   const save = useCallback(
     async (value: SavePayload) => {
-      await apiFetch(`/documents/${documentId}/content`, accessToken, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          title: value.title,
-          content: value.content,
-        }),
-      });
+      await saveDocumentContentAction(documentId, value);
     },
-    [accessToken, documentId],
+    [documentId],
   );
 
   const { status: autosaveStatus } = useAutosave(payload, save, {
     delayMs: 1500,
   });
 
-  async function refreshAfterRestore() {
-    const [document, nextVersions] = await Promise.all([
-      apiFetch<DocumentDetail>(`/documents/${documentId}`, accessToken),
-      apiFetch<VersionRow[]>(`/documents/${documentId}/versions`, accessToken),
-    ]);
-    setTitle(document.title);
-    setContent(document.content ?? { type: 'doc', content: [] });
-    setDocStatus(document.status);
-    setVersions(nextVersions);
-    setContentRevision((value) => value + 1);
-  }
-
   function publish() {
     setPublishError(null);
     startPublish(async () => {
       try {
-        await apiFetch(`/documents/${documentId}/publish`, accessToken, {
-          method: 'POST',
-        });
-        const [document, nextVersions] = await Promise.all([
-          apiFetch<DocumentDetail>(`/documents/${documentId}`, accessToken),
-          apiFetch<VersionRow[]>(
-            `/documents/${documentId}/versions`,
-            accessToken,
-          ),
-        ]);
-        setDocStatus(document.status);
-        setVersions(nextVersions);
+        const result = await publishDocumentAction(documentId);
+        setDocStatus(result.document.status);
+        setVersions(result.versions);
       } catch (err) {
         setPublishError(err instanceof Error ? err.message : 'Publish failed');
       }
     });
+  }
+
+  async function restoreVersion(version: number) {
+    const result = await restoreDocumentVersionAction(documentId, version);
+    setTitle(result.document.title);
+    setContent(result.document.content ?? { type: 'doc', content: [] });
+    setDocStatus(result.document.status);
+    setVersions(result.versions);
+    setContentRevision((value) => value + 1);
   }
 
   return (
@@ -153,7 +137,6 @@ export function DocumentEditor({
         <WikiEditor
           content={content}
           contentRevision={contentRevision}
-          accessToken={accessToken}
           workspaceId={workspaceId}
           documentId={documentId}
           onChange={setContent}
@@ -161,12 +144,7 @@ export function DocumentEditor({
       </div>
 
       <div className="w-full shrink-0 lg:w-72">
-        <VersionPanel
-          documentId={documentId}
-          accessToken={accessToken}
-          versions={versions}
-          onRestored={refreshAfterRestore}
-        />
+        <VersionPanel versions={versions} onRestore={restoreVersion} />
       </div>
     </div>
   );
