@@ -49,7 +49,7 @@ protected `GET /me`, Auth.js v5 Keycloak sign-in, and a local realm import.
 
 ## Important Task 4 follow-up
 
-- Commit `87c590c` fixes Important Task 4 review findings.
+- Commit `caf3e81` fixes Important Task 4 review findings.
 - `AuthGuard.handleRequest` now rethrows `HttpException` errors (including
   `USER_SYNC_FAILED` 500) instead of mapping every failure to 401.
 - Restored authenticated `GET /me` e2e coverage via an `AuthGuard` override
