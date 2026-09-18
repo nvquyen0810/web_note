@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: webnote
+      POSTGRES_PASSWORD: webnote
+      POSTGRES_DB: webnote
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webnote -d webnote"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      - minio
+    environment:
+      S3_BUCKET: webnote
+    volumes:
+      - ./docker/minio/create-bucket.sh:/create-bucket.sh:ro
+    entrypoint: ["/bin/sh", "/create-bucket.sh"]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./docker/keycloak/realm-webnote.json:/opt/keycloak/data/import/realm-webnote.json:ro
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  keycloak-data:

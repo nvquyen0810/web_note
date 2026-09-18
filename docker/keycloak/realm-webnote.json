@@ -1,0 +1,35 @@
+{
+  "realm": "webnote",
+  "enabled": true,
+  "displayName": "Web Note",
+  "clients": [
+    {
+      "clientId": "webnote-web",
+      "name": "Web Note web client",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "webnote-dev-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:3000/api/auth/callback/keycloak"],
+      "webOrigins": ["http://localhost:3000"]
+    }
+  ],
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "demo@example.com",
+      "firstName": "Demo",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}
