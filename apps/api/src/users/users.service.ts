@@ -1,4 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import type { AuthUser, KeycloakClaims } from '../auth/auth.types';
 import {
   DATABASE,
@@ -39,6 +43,9 @@ export class UsersService {
       return user;
     }
 
-    throw new Error('User sync did not return a user');
+    throw new InternalServerErrorException({
+      code: 'USER_SYNC_FAILED',
+      message: 'User synchronization failed',
+    });
   }
 }

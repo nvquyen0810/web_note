@@ -31,27 +31,60 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: unknown): Promise<AuthUser> {
-    if (!isKeycloakClaims(payload)) {
+    const claims = normalizeKeycloakClaims(payload);
+
+    if (!claims) {
       throw new UnauthorizedException({
         code: 'INVALID_TOKEN',
         message: 'Token is missing required user claims',
       });
     }
 
-    return this.usersService.upsertFromClaims(payload);
+    return this.usersService.upsertFromClaims(claims);
   }
 }
 
-function isKeycloakClaims(payload: unknown): payload is KeycloakClaims {
+function normalizeKeycloakClaims(payload: unknown): KeycloakClaims | null {
   if (!payload || typeof payload !== 'object') {
-    return false;
+    return null;
   }
 
   const claims = payload as Record<string, unknown>;
-  return (
-    typeof claims.sub === 'string' &&
-    typeof claims.email === 'string' &&
-    typeof claims.name === 'string' &&
-    (claims.picture === undefined || typeof claims.picture === 'string')
-  );
+  const sub = readString(claims.sub);
+  const preferredUsername = readString(claims.preferred_username);
+  const directEmail = readString(claims.email);
+  const email =
+    directEmail ??
+    (preferredUsername && isEmailShaped(preferredUsername)
+      ? preferredUsername
+      : undefined);
+  const givenName = readString(claims.given_name);
+  const familyName = readString(claims.family_name);
+  const fullName = [givenName, familyName].filter(Boolean).join(' ');
+  const name =
+    readString(claims.name) || fullName || preferredUsername;
+
+  if (!sub || !email || !name) {
+    return null;
+  }
+
+  const picture = readString(claims.picture);
+  return {
+    sub,
+    email,
+    name,
+    ...(picture ? { picture } : {}),
+  };
+}
+
+function readString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  return value.trim() || undefined;
+}
+
+function isEmailShaped(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+$/.test(value);
 }
