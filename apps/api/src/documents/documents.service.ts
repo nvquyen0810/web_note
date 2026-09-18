@@ -1,14 +1,17 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type {
-  CreateDocumentInput,
-  MoveDocumentInput,
-  UpdateDocumentContentInput,
-  UpdateDocumentInput,
+import {
+  roleAtLeast,
+  type CreateDocumentInput,
+  type MoveDocumentInput,
+  type PutDocumentMembersInput,
+  type UpdateDocumentContentInput,
+  type UpdateDocumentInput,
 } from '@web-note/shared';
 import { and, desc, eq, isNull, max } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service';
@@ -17,6 +20,7 @@ import {
   type Database,
 } from '../database/database.module';
 import {
+  documentMembers,
   documentRevisions,
   documentVersions,
   documents,
@@ -130,6 +134,10 @@ export class DocumentsService {
     await this.permissions.requireDocumentAccess(userId, documentId, 'edit');
     const document = await this.findActiveDocument(documentId);
 
+    if (input.isPrivate !== undefined) {
+      await this.assertCanManageDocumentAcl(userId, document);
+    }
+
     if (input.folderId !== undefined && input.folderId !== null) {
       await this.assertFolderInWorkspace(input.folderId, document.workspaceId);
     }
@@ -139,6 +147,9 @@ export class DocumentsService {
       .set({
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
+        ...(input.isPrivate !== undefined
+          ? { isPrivate: input.isPrivate }
+          : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
@@ -154,6 +165,60 @@ export class DocumentsService {
     });
 
     return updated;
+  }
+
+  async listMembers(userId: string, documentId: string) {
+    await this.permissions.requireDocumentAccess(userId, documentId, 'read');
+    await this.findActiveDocument(documentId);
+
+    return this.database
+      .select({
+        documentId: documentMembers.documentId,
+        userId: documentMembers.userId,
+        role: documentMembers.role,
+        createdAt: documentMembers.createdAt,
+      })
+      .from(documentMembers)
+      .where(eq(documentMembers.documentId, documentId));
+  }
+
+  async putMembers(
+    userId: string,
+    documentId: string,
+    input: PutDocumentMembersInput,
+  ) {
+    const document = await this.findActiveDocument(documentId);
+    await this.assertCanManageDocumentAcl(userId, document);
+
+    return this.database.transaction(async (tx) => {
+      await tx
+        .delete(documentMembers)
+        .where(eq(documentMembers.documentId, documentId));
+
+      if (input.members.length > 0) {
+        await tx.insert(documentMembers).values(
+          input.members.map((member) => ({
+            documentId,
+            userId: member.userId,
+            role: member.role,
+          })),
+        );
+      }
+
+      await this.audit.record(
+        {
+          actorId: userId,
+          action: 'document.members.update',
+          resourceType: 'document',
+          resourceId: documentId,
+          workspaceId: document.workspaceId,
+          metadata: { members: input.members },
+        },
+        tx,
+      );
+
+      return input.members;
+    });
   }
 
   async softDelete(userId: string, documentId: string) {
@@ -456,6 +521,28 @@ export class DocumentsService {
         eq(documentVersions.version, version),
       ),
     });
+  }
+
+  private async assertCanManageDocumentAcl(
+    userId: string,
+    document: { id: string; workspaceId: string; createdBy: string },
+  ): Promise<void> {
+    if (document.createdBy === userId) {
+      return;
+    }
+
+    const role = await this.permissions.requireWorkspaceRole(
+      userId,
+      document.workspaceId,
+      'admin',
+    );
+
+    if (!roleAtLeast(role, 'admin')) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Insufficient permission to manage document ACL',
+      });
+    }
   }
 
   private async findActiveDocument(documentId: string) {

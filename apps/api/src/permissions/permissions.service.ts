@@ -76,7 +76,10 @@ export class PermissionsService {
       return null;
     }
 
-    const role = documentMember?.role ?? workspaceMember?.role;
+    const role =
+      documentMember?.role ??
+      workspaceMember?.role ??
+      (document.createdBy === userId ? 'editor' : undefined);
 
     if (!role) {
       return null;

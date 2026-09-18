@@ -9,15 +9,18 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import {
   createDocumentSchema,
   moveDocumentSchema,
+  putDocumentMembersSchema,
   updateDocumentContentSchema,
   updateDocumentSchema,
   type CreateDocumentInput,
   type MoveDocumentInput,
+  type PutDocumentMembersInput,
   type UpdateDocumentContentInput,
   type UpdateDocumentInput,
 } from '@web-note/shared';
@@ -137,5 +140,23 @@ export class DocumentsController {
     @Param('version', ParseIntPipe) version: number,
   ) {
     return this.documents.restoreVersion(user.id, id, version);
+  }
+
+  @Get('documents/:id/members')
+  listMembers(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.documents.listMembers(user.id, id);
+  }
+
+  @Put('documents/:id/members')
+  putMembers(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(putDocumentMembersSchema))
+    body: PutDocumentMembersInput,
+  ) {
+    return this.documents.putMembers(user.id, id, body);
   }
 }
