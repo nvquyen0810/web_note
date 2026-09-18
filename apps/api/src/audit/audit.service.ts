@@ -14,11 +14,16 @@ export type AuditRecordInput = {
   metadata?: Record<string, unknown>;
 };
 
+type AuditExecutor = Pick<Database, 'insert'>;
+
 @Injectable()
 export class AuditService {
   constructor(@Inject(DATABASE) private readonly database: Database) {}
 
-  async record(entry: AuditRecordInput): Promise<void> {
-    await this.database.insert(auditLogs).values(entry);
+  async record(
+    entry: AuditRecordInput,
+    executor: AuditExecutor = this.database,
+  ): Promise<void> {
+    await executor.insert(auditLogs).values(entry);
   }
 }

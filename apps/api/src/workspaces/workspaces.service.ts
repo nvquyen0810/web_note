@@ -32,7 +32,7 @@ export class WorkspacesService {
   ) {}
 
   async create(userId: string, input: CreateWorkspaceInput) {
-    const workspace = await this.database.transaction(async (tx) => {
+    return this.database.transaction(async (tx) => {
       const [created] = await tx
         .insert(workspaces)
         .values({
@@ -47,18 +47,19 @@ export class WorkspacesService {
         role: 'owner',
       });
 
+      await this.audit.record(
+        {
+          actorId: userId,
+          action: 'workspace.create',
+          resourceType: 'workspace',
+          resourceId: created.id,
+          workspaceId: created.id,
+        },
+        tx,
+      );
+
       return created;
     });
-
-    await this.audit.record({
-      actorId: userId,
-      action: 'workspace.create',
-      resourceType: 'workspace',
-      resourceId: workspace.id,
-      workspaceId: workspace.id,
-    });
-
-    return workspace;
   }
 
   async listForUser(userId: string) {
@@ -157,25 +158,29 @@ export class WorkspacesService {
       await this.assertCanAssignOwner(actorId, workspaceId);
     }
 
-    const [member] = await this.database
-      .insert(workspaceMembers)
-      .values({
+    try {
+      const [member] = await this.database
+        .insert(workspaceMembers)
+        .values({
+          workspaceId,
+          userId: input.userId,
+          role: input.role,
+        })
+        .returning();
+
+      await this.audit.record({
+        actorId,
+        action: 'workspace.member.add',
+        resourceType: 'workspace',
+        resourceId: workspaceId,
         workspaceId,
-        userId: input.userId,
-        role: input.role,
-      })
-      .returning();
+        metadata: { userId: input.userId, role: input.role },
+      });
 
-    await this.audit.record({
-      actorId,
-      action: 'workspace.member.add',
-      resourceType: 'workspace',
-      resourceId: workspaceId,
-      workspaceId,
-      metadata: { userId: input.userId, role: input.role },
-    });
-
-    return member;
+      return member;
+    } catch (error) {
+      this.rethrowMemberWriteError(error);
+    }
   }
 
   async updateMember(
@@ -333,5 +338,31 @@ export class WorkspacesService {
         message: 'Cannot remove or demote the last workspace owner',
       });
     }
+  }
+
+  private rethrowMemberWriteError(error: unknown): never {
+    const code =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof (error as { code: unknown }).code === 'string'
+        ? (error as { code: string }).code
+        : undefined;
+
+    if (code === '23505') {
+      throw new BadRequestException({
+        code: 'MEMBER_ALREADY_EXISTS',
+        message: 'User is already a member of this workspace',
+      });
+    }
+
+    if (code === '23503') {
+      throw new NotFoundException({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+      });
+    }
+
+    throw error;
   }
 }
