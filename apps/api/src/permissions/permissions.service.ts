@@ -124,4 +124,24 @@ export class PermissionsService {
 
     return member.role;
   }
+
+  async requireDocumentAccess(
+    userId: string,
+    documentId: string,
+    mode: 'read' | 'edit' = 'read',
+  ): Promise<EffectiveDocumentAccess> {
+    const access = await this.getEffectiveDocumentAccess(userId, documentId);
+
+    if (!access || (mode === 'edit' && !access.canEdit)) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message:
+          mode === 'edit'
+            ? 'Insufficient permission to edit document'
+            : 'Insufficient permission to read document',
+      });
+    }
+
+    return access;
+  }
 }
