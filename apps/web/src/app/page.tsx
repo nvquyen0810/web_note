@@ -1,56 +1,50 @@
+import Link from 'next/link';
 import { APP_NAME } from '@web-note/shared';
-import { auth, signIn, signOut } from '../auth';
+import { redirect } from 'next/navigation';
+import { auth, signIn } from '@/auth';
+import { Button } from '@/components/ui/button';
 
-interface Me {
-  id: string;
-  keycloakSub: string;
-  email: string;
-  name: string;
-}
-
-async function getMe(accessToken: string): Promise<Me | null> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (!apiUrl) {
-    throw new Error('NEXT_PUBLIC_API_URL is required');
+export default async function HomePage() {
+  const session = await auth();
+  if (session?.accessToken) {
+    redirect('/workspaces');
   }
 
-  const response = await fetch(`${apiUrl.replace(/\/$/, '')}/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: 'no-store',
-  });
-
-  return response.ok ? (response.json() as Promise<Me>) : null;
-}
-
-export default async function Home() {
-  const session = await auth();
-  const me = session?.accessToken ? await getMe(session.accessToken) : null;
-
   return (
-    <main>
-      <h1>{APP_NAME}</h1>
-      {session ? (
-        <>
-          <p>{me ? `Signed in as ${me.name} (${me.email})` : 'Signed in'}</p>
-          <form
-            action={async () => {
-              'use server';
-              await signOut();
-            }}
-          >
-            <button type="submit">Sign out</button>
-          </form>
-        </>
-      ) : (
+    <main className="relative flex min-h-screen flex-col items-center justify-center px-6">
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute -left-24 top-16 h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
+        <div className="absolute bottom-10 right-0 h-80 w-80 rounded-full bg-amber-200/40 blur-3xl" />
+      </div>
+
+      <div className="mx-auto max-w-lg text-center">
+        <p className="font-display text-5xl font-semibold tracking-tight text-foreground sm:text-6xl">
+          {APP_NAME}
+        </p>
+        <h1 className="mt-4 text-xl text-muted-foreground sm:text-2xl">
+          Your team&apos;s internal wiki
+        </h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Draft, publish, and share knowledge across workspaces.
+        </p>
         <form
+          className="mt-8"
           action={async () => {
             'use server';
-            await signIn('keycloak');
+            await signIn('keycloak', { redirectTo: '/workspaces' });
           }}
         >
-          <button type="submit">Sign in with Keycloak</button>
+          <Button type="submit" size="lg">
+            Sign in with Keycloak
+          </Button>
         </form>
-      )}
+        <p className="mt-6 text-xs text-muted-foreground">
+          Already exploring?{' '}
+          <Link href="/workspaces" className="underline underline-offset-2">
+            Open workspaces
+          </Link>
+        </p>
+      </div>
     </main>
   );
 }
