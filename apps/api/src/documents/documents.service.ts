@@ -7,9 +7,10 @@ import {
 import type {
   CreateDocumentInput,
   MoveDocumentInput,
+  UpdateDocumentContentInput,
   UpdateDocumentInput,
 } from '@web-note/shared';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, max } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service';
 import {
   DATABASE,
@@ -17,6 +18,7 @@ import {
 } from '../database/database.module';
 import {
   documentRevisions,
+  documentVersions,
   documents,
   folders,
   type DocumentContent,
@@ -243,6 +245,104 @@ export class DocumentsService {
       );
 
       return created;
+    });
+  }
+
+  async updateContent(
+    userId: string,
+    documentId: string,
+    input: UpdateDocumentContentInput,
+  ) {
+    await this.permissions.requireDocumentAccess(userId, documentId, 'edit');
+    const document = await this.findActiveDocument(documentId);
+
+    const [revision] = await this.database
+      .update(documentRevisions)
+      .set({
+        content: input.content as DocumentContent,
+        updatedBy: userId,
+        updatedAt: new Date(),
+      })
+      .where(eq(documentRevisions.documentId, documentId))
+      .returning();
+
+    if (!revision) {
+      throw new NotFoundException({
+        code: 'REVISION_NOT_FOUND',
+        message: 'Document revision not found',
+      });
+    }
+
+    let updatedDocument = document;
+    if (input.title !== undefined) {
+      const [next] = await this.database
+        .update(documents)
+        .set({ title: input.title, updatedAt: new Date() })
+        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
+        .returning();
+      updatedDocument = next ?? document;
+    } else {
+      await this.database
+        .update(documents)
+        .set({ updatedAt: new Date() })
+        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)));
+    }
+
+    return {
+      ...updatedDocument,
+      content: revision.content,
+    };
+  }
+
+  async publish(userId: string, documentId: string) {
+    await this.permissions.requireDocumentAccess(userId, documentId, 'edit');
+    const document = await this.findActiveDocument(documentId);
+
+    return this.database.transaction(async (tx) => {
+      const revision = await tx.query.documentRevisions.findFirst({
+        where: eq(documentRevisions.documentId, documentId),
+      });
+
+      if (!revision) {
+        throw new NotFoundException({
+          code: 'REVISION_NOT_FOUND',
+          message: 'Document revision not found',
+        });
+      }
+
+      const [row] = await tx
+        .select({ maxVersion: max(documentVersions.version) })
+        .from(documentVersions)
+        .where(eq(documentVersions.documentId, documentId));
+
+      const next = (row?.maxVersion ?? 0) + 1;
+
+      await tx.insert(documentVersions).values({
+        documentId,
+        version: next,
+        content: revision.content,
+        title: document.title,
+        createdBy: userId,
+      });
+
+      await tx
+        .update(documents)
+        .set({ status: 'published', updatedAt: new Date() })
+        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)));
+
+      await this.audit.record(
+        {
+          actorId: userId,
+          action: 'document.publish',
+          resourceType: 'document',
+          resourceId: documentId,
+          workspaceId: document.workspaceId,
+          metadata: { version: next },
+        },
+        tx,
+      );
+
+      return { version: next };
     });
   }
 

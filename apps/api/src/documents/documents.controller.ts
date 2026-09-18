@@ -13,9 +13,11 @@ import {
 import {
   createDocumentSchema,
   moveDocumentSchema,
+  updateDocumentContentSchema,
   updateDocumentSchema,
   type CreateDocumentInput,
   type MoveDocumentInput,
+  type UpdateDocumentContentInput,
   type UpdateDocumentInput,
 } from '@web-note/shared';
 import { AuthGuard } from '../auth/auth.guard';
@@ -90,5 +92,23 @@ export class DocumentsController {
     @Body(new ZodValidationPipe(moveDocumentSchema)) body: MoveDocumentInput,
   ) {
     return this.documents.move(user.id, id, body);
+  }
+
+  @Patch('documents/:id/content')
+  updateContent(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(updateDocumentContentSchema))
+    body: UpdateDocumentContentInput,
+  ) {
+    return this.documents.updateContent(user.id, id, body);
+  }
+
+  @Post('documents/:id/publish')
+  publish(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.documents.publish(user.id, id);
   }
 }
