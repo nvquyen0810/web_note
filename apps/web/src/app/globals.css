@@ -47,3 +47,40 @@
     background-attachment: fixed;
   }
 }
+
+.wiki-editor ul[data-type='taskList'] {
+  @apply list-none pl-0;
+}
+
+.wiki-editor ul[data-type='taskList'] li {
+  @apply flex items-start gap-2;
+}
+
+.wiki-editor ul[data-type='taskList'] li > label {
+  @apply mt-1;
+}
+
+.wiki-editor table {
+  @apply w-full border-collapse overflow-hidden rounded-md;
+}
+
+.wiki-editor th,
+.wiki-editor td {
+  @apply border border-border px-3 py-2 text-left align-top;
+}
+
+.wiki-editor th {
+  @apply bg-muted font-medium;
+}
+
+.wiki-editor pre {
+  @apply overflow-x-auto rounded-md bg-slate-900 p-4 text-slate-50;
+}
+
+.wiki-editor code {
+  @apply rounded bg-muted px-1 py-0.5 text-sm;
+}
+
+.wiki-editor pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
