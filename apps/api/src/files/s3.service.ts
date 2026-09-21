@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import {
   HeadObjectCommand,
   PutObjectCommand,
@@ -6,8 +5,16 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Injectable } from '@nestjs/common';
+import type { Readable } from 'node:stream';
 
 export type HeadObjectResult = {
+  contentType?: string;
+  contentLength?: number;
+};
+
+export type ObjectStreamResult = {
+  body: Readable;
   contentType?: string;
   contentLength?: number;
 };
@@ -63,6 +70,25 @@ export class S3Service {
       }),
       { expiresIn: expiresInSeconds },
     );
+  }
+
+  async getObjectStream(storageKey: string): Promise<ObjectStreamResult> {
+    const result = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: storageKey,
+      }),
+    );
+
+    if (!result.Body) {
+      throw new Error('Empty S3 object body');
+    }
+
+    return {
+      body: result.Body as Readable,
+      contentType: result.ContentType,
+      contentLength: result.ContentLength,
+    };
   }
 
   async headObject(storageKey: string): Promise<HeadObjectResult> {

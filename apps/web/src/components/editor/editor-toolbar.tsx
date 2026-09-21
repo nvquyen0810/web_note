@@ -3,6 +3,7 @@
 import type { Editor } from '@tiptap/react';
 import {
   Bold,
+  Code2,
   Heading1,
   Heading2,
   Heading3,
@@ -24,8 +25,9 @@ import {
 } from 'lucide-react';
 import { useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { uploadDocumentImageAction } from '@/lib/actions';
+import { uploadImageFile } from '@/lib/upload-image-client';
 import { cn } from '@/lib/utils';
+import { insertWikiImage } from './wiki-image';
 
 type EditorToolbarProps = {
   editor: Editor;
@@ -67,22 +69,16 @@ export function EditorToolbar({
 
   async function handleImageSelected(file: File | undefined) {
     if (!file) return;
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error ?? new Error('read failed'));
-      reader.readAsDataURL(file);
-    });
-    const base64 = dataUrl.split(',')[1] ?? '';
-    const { url } = await uploadDocumentImageAction({
+    const { url, id } = await uploadImageFile({
+      file,
       workspaceId,
       documentId,
-      filename: file.name,
-      mimeType: file.type || 'application/octet-stream',
-      sizeBytes: file.size,
-      bytesBase64: base64,
     });
-    editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+    insertWikiImage(editor, {
+      src: url,
+      alt: file.name,
+      fileId: id,
+    });
   }
 
   return (
@@ -232,6 +228,13 @@ export function EditorToolbar({
         }
       >
         <Table className="h-4 w-4" />
+      </ToolButton>
+      <ToolButton
+        title="Code block"
+        active={editor.isActive('codeBlock')}
+        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+      >
+        <Code2 className="h-4 w-4" />
       </ToolButton>
       <ToolButton
         title="Callout"

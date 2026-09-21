@@ -35,6 +35,7 @@ describe('FilesService', () => {
       {
         createPresignedPutUrl,
         createPresignedGetUrl: jest.fn(),
+        getObjectStream: jest.fn(),
         headObject: jest.fn(),
       } as unknown as S3Service,
       {

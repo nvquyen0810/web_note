@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAutosave } from '@/hooks/use-autosave';
 import {
+  deleteDocumentAction,
   publishDocumentAction,
   restoreDocumentVersionAction,
   saveDocumentContentAction,
@@ -31,6 +32,7 @@ type SavePayload = {
 };
 
 type AutosaveUiStatus = ReturnType<typeof useAutosave<SavePayload>>['status'];
+type EditorMode = 'view' | 'edit';
 
 function statusLabel(status: AutosaveUiStatus) {
   switch (status) {
@@ -53,6 +55,9 @@ export function DocumentEditor({
   initialDocument,
   initialVersions,
 }: DocumentEditorProps) {
+  const [mode, setMode] = useState<EditorMode>(
+    initialDocument.status === 'published' ? 'view' : 'edit',
+  );
   const [title, setTitle] = useState(initialDocument.title);
   const [content, setContent] = useState<WikiDocJson>(
     initialDocument.content ?? { type: 'doc', content: [] },
@@ -62,6 +67,9 @@ export function DocumentEditor({
   const [contentRevision, setContentRevision] = useState(0);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [isPublishing, startPublish] = useTransition();
+  const [isDeleting, startDelete] = useTransition();
+
+  const editing = mode === 'edit';
 
   const payload = useMemo<SavePayload>(
     () => ({ title, content }),
@@ -77,6 +85,7 @@ export function DocumentEditor({
 
   const { status: autosaveStatus } = useAutosave(payload, save, {
     delayMs: 1500,
+    enabled: editing,
   });
 
   function publish() {
@@ -86,9 +95,20 @@ export function DocumentEditor({
         const result = await publishDocumentAction(documentId);
         setDocStatus(result.document.status);
         setVersions(result.versions);
+        setMode('view');
       } catch (err) {
         setPublishError(err instanceof Error ? err.message : 'Publish failed');
       }
+    });
+  }
+
+  function removeDocument() {
+    const ok = window.confirm(
+      `Delete “${title}”? This soft-deletes the document.`,
+    );
+    if (!ok) return;
+    startDelete(async () => {
+      await deleteDocumentAction(workspaceId, documentId);
     });
   }
 
@@ -99,6 +119,7 @@ export function DocumentEditor({
     setDocStatus(result.document.status);
     setVersions(result.versions);
     setContentRevision((value) => value + 1);
+    setMode('edit');
   }
 
   return (
@@ -106,28 +127,59 @@ export function DocumentEditor({
       <div className="min-w-0 flex-1 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-2">
-            <Input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="h-auto border-0 bg-transparent px-0 font-display text-3xl font-semibold shadow-none focus-visible:ring-0"
-              aria-label="Document title"
-            />
+            {editing ? (
+              <Input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                className="h-auto border-0 bg-transparent px-0 font-display text-3xl font-semibold shadow-none focus-visible:ring-0"
+                aria-label="Document title"
+              />
+            ) : (
+              <h1 className="font-display text-3xl font-semibold tracking-tight">
+                {title}
+              </h1>
+            )}
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <Badge
                 variant={docStatus === 'published' ? 'published' : 'draft'}
               >
                 {docStatus}
               </Badge>
-              <span>{statusLabel(autosaveStatus)}</span>
+              {editing ? <span>{statusLabel(autosaveStatus)}</span> : null}
             </div>
           </div>
-          <Button
-            type="button"
-            onClick={publish}
-            disabled={isPublishing || autosaveStatus === 'saving'}
-          >
-            {isPublishing ? 'Publishing…' : 'Publish'}
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {editing ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setMode('view')}
+                >
+                  Done
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={removeDocument}
+                  disabled={isDeleting || isPublishing}
+                >
+                  {isDeleting ? 'Deleting…' : 'Delete'}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={publish}
+                  disabled={isPublishing || autosaveStatus === 'saving'}
+                >
+                  {isPublishing ? 'Publishing…' : 'Publish'}
+                </Button>
+              </>
+            ) : (
+              <Button type="button" onClick={() => setMode('edit')}>
+                Edit
+              </Button>
+            )}
+          </div>
         </div>
 
         {publishError ? (
@@ -135,17 +187,21 @@ export function DocumentEditor({
         ) : null}
 
         <WikiEditor
+          key={`${documentId}-${mode}`}
           content={content}
           contentRevision={contentRevision}
           workspaceId={workspaceId}
           documentId={documentId}
+          editable={editing}
           onChange={setContent}
         />
       </div>
 
-      <div className="w-full shrink-0 lg:w-72">
-        <VersionPanel versions={versions} onRestore={restoreVersion} />
-      </div>
+      {editing ? (
+        <div className="w-full shrink-0 lg:w-72">
+          <VersionPanel versions={versions} onRestore={restoreVersion} />
+        </div>
+      ) : null}
     </div>
   );
 }

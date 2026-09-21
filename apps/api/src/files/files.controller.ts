@@ -40,6 +40,14 @@ export class FilesController {
     return this.files.complete(user.id, body);
   }
 
+  @Get(':id/content')
+  content(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.files.getContentStream(user.id, id);
+  }
+
   @Get(':id')
   get(
     @CurrentUser() user: AuthUser,

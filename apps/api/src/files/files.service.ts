@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  StreamableFile,
 } from '@nestjs/common';
 import type {
   CompleteFileInput,
@@ -151,15 +152,30 @@ export class FilesService {
       });
     }
 
-    const url = await this.s3.createPresignedGetUrl(file.storageKey);
-
     return {
       id: file.id,
-      url,
+      // Stable path — never embed short-lived MinIO URLs in document JSON.
+      url: `/files/${file.id}/content`,
     };
   }
 
   async getDownloadUrl(userId: string, fileId: string) {
+    const file = await this.requireReadableFile(userId, fileId);
+    const url = await this.s3.createPresignedGetUrl(file.storageKey);
+    return { id: file.id, url };
+  }
+
+  async getContentStream(userId: string, fileId: string) {
+    const file = await this.requireReadableFile(userId, fileId);
+    const object = await this.s3.getObjectStream(file.storageKey);
+    return new StreamableFile(object.body, {
+      type: object.contentType ?? file.mime,
+      length: object.contentLength ?? file.sizeBytes,
+      disposition: 'inline',
+    });
+  }
+
+  private async requireReadableFile(userId: string, fileId: string) {
     const file = await this.database.query.files.findFirst({
       where: eq(files.id, fileId),
     });
@@ -184,7 +200,6 @@ export class FilesService {
       });
     }
 
-    const url = await this.s3.createPresignedGetUrl(file.storageKey);
-    return { id: file.id, url };
+    return file;
   }
 }

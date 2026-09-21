@@ -127,6 +127,18 @@ export async function restoreDocumentVersionAction(
   return { document, versions };
 }
 
+export async function deleteDocumentAction(
+  workspaceId: string,
+  documentId: string,
+) {
+  const token = await requireAccessToken();
+  await apiFetch(`/documents/${documentId}`, token, {
+    method: 'DELETE',
+  });
+  revalidatePath(`/w/${workspaceId}`);
+  redirect(`/w/${workspaceId}`);
+}
+
 export async function uploadDocumentImageAction(input: {
   workspaceId: string;
   documentId: string;

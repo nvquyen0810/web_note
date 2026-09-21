@@ -19,7 +19,7 @@ export const moveDocumentSchema = z.object({
 });
 
 export const updateDocumentContentSchema = z.object({
-  content: z.record(z.string(), z.unknown()),
+  content: z.unknown(),
   title: z.string().min(1).max(500).optional(),
 });
 
